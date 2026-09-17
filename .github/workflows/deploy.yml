@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: terzo241-platform/platform-workflows/.github/workflows/container-build.yml@main
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    with:
+      image-name: sample-nextjs-app
+      gcp-project-id: ${{ vars.GCP_PROJECT_ID }}
+      wif-provider: ${{ vars.WIF_PROVIDER }}
+      wif-service-account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+      push: true
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run (dev)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sample-nextjs-app-dev
+          image: ${{ needs.build.outputs.image-ref }}
+          region: asia-south1
+
+  deploy-staging:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sample-nextjs-app-staging
+          image: ${{ needs.build.outputs.image-ref }}
+          region: asia-south1
+
+  deploy-prod:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run (prod)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sample-nextjs-app-prod
+          image: ${{ needs.build.outputs.image-ref }}
+          region: asia-south1

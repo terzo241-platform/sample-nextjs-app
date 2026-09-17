@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  id-token: write
 
 jobs:
   node-ci:
@@ -20,3 +21,17 @@ jobs:
       node-version: "22"
       package-manager: npm
       enable-playwright: true
+
+  container-build:
+    needs: node-ci
+    uses: terzo241-platform/platform-workflows/.github/workflows/container-build.yml@main
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    with:
+      image-name: sample-nextjs-app
+      gcp-project-id: ${{ vars.GCP_PROJECT_ID }}
+      wif-provider: ${{ vars.WIF_PROVIDER }}
+      wif-service-account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
