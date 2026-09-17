@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  node-ci:
+    uses: terzo241-platform/platform-workflows/.github/workflows/node-ci.yml@main
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      node-version: "22"
+      package-manager: npm
+      enable-playwright: true
