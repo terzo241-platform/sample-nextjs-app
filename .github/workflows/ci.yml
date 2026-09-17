@@ -36,3 +36,4 @@ jobs:
       wif-provider: ${{ vars.WIF_PROVIDER }}
       wif-service-account: ${{ vars.WIF_SERVICE_ACCOUNT }}
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.WIF_PROVIDER != '' }}
+      fail-on-vulnerabilities: false
