@@ -1,0 +1,49 @@
+name: GitOps Bridge — Notify Infrastructure
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  notify-infra:
+    name: Trigger Infrastructure Update
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract image tag from CI run
+        id: tag
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          echo "image_tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: sha-${SHORT_SHA}"
+
+      - name: Trigger platform-terraform promotion
+        if: vars.ENABLE_GITOPS_BRIDGE == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PLATFORM_PAT }}
+          repository: terzo241-platform/platform-terraform
+          event-type: image-built
+          client-payload: |
+            {
+              "service": "sample-nextjs-app",
+              "image_tag": "${{ steps.tag.outputs.image_tag }}",
+              "source_repo": "${{ github.repository }}",
+              "source_sha": "${{ github.event.workflow_run.head_sha }}",
+              "source_run_id": "${{ github.event.workflow_run.id }}"
+            }
+
+      - name: Summary
+        run: |
+          echo "### GitOps Bridge" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ vars.ENABLE_GITOPS_BRIDGE }}" = "true" ]; then
+            echo "Triggered platform-terraform promotion for **sample-nextjs-app:${{ steps.tag.outputs.image_tag }}** to dev" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "GitOps bridge disabled (set ENABLE_GITOPS_BRIDGE=true to enable)" >> "$GITHUB_STEP_SUMMARY"
+          fi
